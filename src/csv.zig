@@ -15,29 +15,32 @@ fn contains(arr: []const u8, target: u8) bool {
 }
 
 pub fn determineDelimiter(str: []const u8) !u8 {
-    const possibleDelimiter = []u8{ ',', ';', '\t', '|' };
-    var countMap = std.AutoHashMap(u8, u32);
+    const alloc = std.heap.page_allocator;
+
+    const possibleDelimiter = [_]u8{ ',', ';', '\t', '|' };
+    var countMap = std.AutoHashMap(u8, u32).init(alloc);
 
     for (possibleDelimiter) |del| {
-        countMap.put(del, 0);
+        try countMap.put(del, 0);
     }
 
     for (str) |c| {
-        if (!contains(possibleDelimiter, c)) {
+        if (!contains(&possibleDelimiter, c)) {
             continue;
         }
 
-        const current = countMap.get(c);
-        countMap.put(c, current + 1);
+        const current = countMap.get(c) orelse 0;
+        try countMap.put(c, current + 1);
     }
 
     var currDel: u8 = ' ';
     var highest: u32 = 0;
 
-    for (countMap.keyIterator()) |key| {
-        const val = try countMap.get(key);
+    var iter = countMap.keyIterator();
+    while (iter.next()) |key| {
+        const val = countMap.get(key.*) orelse 0;
         if (val > highest) {
-            currDel = key;
+            currDel = key.*;
             highest = val;
         }
     }
@@ -49,6 +52,22 @@ pub fn determineDelimiter(str: []const u8) !u8 {
     return currDel;
 }
 
+const CsvFile = struct {
+    header: std.ArrayList([]const u8),
+    entries: std.ArrayList(std.ArrayList([]const u8)),
+
+    pub fn isValid(self: CsvFile) bool {
+        const colNum = self.header.items.len();
+        for (self.entries) |entry| {
+            if (entry.items.len != colNum) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+};
+
 pub fn loadFile(filepath: []const u8) !void {
     const alloc = std.heap.page_allocator;
     var file = try std.fs.cwd().openFile(filepath, .{});
@@ -59,18 +78,19 @@ pub fn loadFile(filepath: []const u8) !void {
     var buffer: [4096]u8 = undefined;
 
     var readHeader = false;
-    var headerList = undefined;
+    var headerList: std.ArrayList([]const u8) = undefined;
     var entries = std.ArrayList(std.ArrayList([]const u8)).init(alloc);
-    var delimiter = ' ';
+    var delimiter: u8 = ' ';
 
     while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
         if (delimiter == ' ') {
-            delimiter = determineDelimiter(line);
+            delimiter = try determineDelimiter(line);
         }
 
+        const del = delimiter;
         var entr = std.ArrayList([]const u8).init(alloc);
-        const splitIt = std.mem.split(u8, line, delimiter);
-        for (splitIt) |part| {
+        var splitIt = std.mem.splitSequence(u8, line, &[_]u8{del});
+        while (splitIt.next()) |part| {
             _ = try entr.append(part);
         }
 
