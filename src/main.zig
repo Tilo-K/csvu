@@ -22,7 +22,12 @@ pub fn main() !void {
         return;
     }
 
-    try csv.loadFile(filepath);
-
+    var file = try csv.loadFile(filepath);
+    const valid = file.isValid();
+    if (valid) {
+        _ = try stdout.write("Csv is valid\n");
+    } else {
+        _ = try stdout.write("Csv is not valid\n");
+    }
     _ = try bw.flush();
 }

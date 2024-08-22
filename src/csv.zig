@@ -57,8 +57,8 @@ const CsvFile = struct {
     entries: std.ArrayList(std.ArrayList([]const u8)),
 
     pub fn isValid(self: CsvFile) bool {
-        const colNum = self.header.items.len();
-        for (self.entries) |entry| {
+        const colNum = self.header.items.len;
+        for (self.entries.items) |entry| {
             if (entry.items.len != colNum) {
                 return false;
             }
@@ -68,7 +68,7 @@ const CsvFile = struct {
     }
 };
 
-pub fn loadFile(filepath: []const u8) !void {
+pub fn loadFile(filepath: []const u8) !CsvFile {
     const alloc = std.heap.page_allocator;
     var file = try std.fs.cwd().openFile(filepath, .{});
     defer file.close();
@@ -101,6 +101,8 @@ pub fn loadFile(filepath: []const u8) !void {
         }
         _ = try entries.append(entr);
     }
+
+    return CsvFile{ .entries = entries, .header = headerList };
 }
 
 test "Determine delimiter" {
