@@ -30,4 +30,7 @@ pub fn main() !void {
         _ = try stdout.write("Csv is not valid\n");
     }
     _ = try bw.flush();
+
+    try csv.printTable(file);
+    _ = try bw.flush();
 }

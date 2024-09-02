@@ -1,8 +1,21 @@
 const std = @import("std");
+const term = @import("term.zig");
 
 const CsvError = error{
     NoDelimiterFound,
 };
+
+fn concat(one: []const u8, two: []const u8) ![]const u8 {
+    const allocator = std.heap.page_allocator;
+    var result = try allocator.alloc(u8, one.len + two.len);
+
+    std.mem.copyForwards(u8, result[0..], one);
+    std.mem.copyForwards(u8, result[one.len..], two);
+
+    std.debug.print("{s}\n", .{result});
+
+    return result;
+}
 
 fn contains(arr: []const u8, target: u8) bool {
     for (arr) |element| {
@@ -68,6 +81,75 @@ const CsvFile = struct {
     }
 };
 
+pub fn printTable(file: CsvFile) !void {
+    const stdout_file = std.io.getStdOut().writer();
+    var bw = std.io.bufferedWriter(stdout_file);
+    const stdout = bw.writer();
+
+    defer {
+        _ = bw.flush() catch null;
+    }
+
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer {
+        _ = gpa.deinit();
+    }
+
+    const alloc = gpa.allocator();
+    const dimensions = try term.getTerminalDimensions();
+    const col_nums = file.header.items.len;
+    const col_sizes = try alloc.alloc(usize, col_nums);
+    defer alloc.free(col_sizes);
+
+    for (0..col_nums) |i| {
+        col_sizes[i] = 0;
+    }
+    for (file.entries.items) |entry| {
+        for (0..col_nums) |i| {
+            const curr = col_sizes[i];
+            if (entry.items[i].len > curr) {
+                col_sizes[i] = entry.items[i].len;
+            }
+        }
+    }
+
+    _ = dimensions;
+
+    std.debug.print("{any}\n", .{col_sizes});
+    var complete_length = col_nums + 1;
+    for (col_sizes) |col_size| {
+        complete_length += col_size;
+    }
+
+    for (0..complete_length) |_| {
+        try stdout.print("-", .{});
+    }
+    try stdout.print("\n", .{});
+
+    for (file.entries.items) |entry| {
+        var out_line: []const u8 = "|";
+
+        for (0..col_nums) |i| {
+            const out = entry.items[i];
+            const missing = col_sizes[i] - out.len;
+
+            out_line = try concat(out_line, out);
+
+            for (0..missing) |_| {
+                out_line = try concat(out_line, "_");
+            }
+            out_line = try concat(out_line, "|");
+        }
+        out_line = try concat(out_line, "\n");
+        _ = try stdout.writeAll(out_line);
+        _ = try bw.flush();
+    }
+    for (0..complete_length) |_| {
+        try stdout.print("-", .{});
+    }
+    try stdout.print("\n", .{});
+}
+
 pub fn loadFile(filepath: []const u8) !CsvFile {
     const alloc = std.heap.page_allocator;
     var file = try std.fs.cwd().openFile(filepath, .{});
@@ -90,8 +172,12 @@ pub fn loadFile(filepath: []const u8) !CsvFile {
         const del = delimiter;
         var entr = std.ArrayList([]const u8).init(alloc);
         var splitIt = std.mem.splitSequence(u8, line, &[_]u8{del});
+
         while (splitIt.next()) |part| {
-            _ = try entr.append(part);
+            const dest = try alloc.alloc(u8, part.len);
+
+            std.mem.copyForwards(u8, dest, part);
+            _ = try entr.append(dest);
         }
 
         if (!readHeader) {
