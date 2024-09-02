@@ -12,8 +12,6 @@ fn concat(one: []const u8, two: []const u8) ![]const u8 {
     std.mem.copyForwards(u8, result[0..], one);
     std.mem.copyForwards(u8, result[one.len..], two);
 
-    std.debug.print("{s}\n", .{result});
-
     return result;
 }
 
@@ -136,7 +134,7 @@ pub fn printTable(file: CsvFile) !void {
             out_line = try concat(out_line, out);
 
             for (0..missing) |_| {
-                out_line = try concat(out_line, "_");
+                out_line = try concat(out_line, " ");
             }
             out_line = try concat(out_line, "|");
         }
@@ -177,7 +175,8 @@ pub fn loadFile(filepath: []const u8) !CsvFile {
             const dest = try alloc.alloc(u8, part.len);
 
             std.mem.copyForwards(u8, dest, part);
-            _ = try entr.append(dest);
+            const res = std.mem.trim(u8, dest, &[_]u8{ '\n', '\t', '\r', ' ' });
+            _ = try entr.append(res);
         }
 
         if (!readHeader) {
