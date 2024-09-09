@@ -100,7 +100,7 @@ pub fn printTable(file: CsvFile) !void {
     defer alloc.free(col_sizes);
 
     for (0..col_nums) |i| {
-        col_sizes[i] = 0;
+        col_sizes[i] = file.header.items[i].len;
     }
     for (file.entries.items) |entry| {
         for (0..col_nums) |i| {
@@ -113,11 +113,30 @@ pub fn printTable(file: CsvFile) !void {
 
     _ = dimensions;
 
-    std.debug.print("{any}\n", .{col_sizes});
     var complete_length = col_nums + 1;
     for (col_sizes) |col_size| {
         complete_length += col_size;
     }
+
+    for (0..complete_length) |_| {
+        try stdout.print("-", .{});
+    }
+    try stdout.print("\n|", .{});
+
+    for (0..col_nums) |i| {
+        const out = file.header.items[i];
+        const missing = col_sizes[i] - out.len;
+
+        _ = try stdout.writeAll(out);
+
+        for (0..missing) |_| {
+            _ = try stdout.writeAll(" ");
+        }
+        _ = try stdout.writeAll("|");
+    }
+
+    _ = try stdout.writeAll("\n");
+    _ = try bw.flush();
 
     for (0..complete_length) |_| {
         try stdout.print("-", .{});

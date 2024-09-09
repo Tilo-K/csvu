@@ -24,11 +24,8 @@ pub fn main() !void {
 
     var file = try csv.loadFile(filepath);
     const valid = file.isValid();
-    if (valid) {
-        _ = try stdout.write("Csv is valid\n");
-    } else {
-        _ = try stdout.write("Csv is not valid\n");
-    }
+    if (!valid) return;
+
     _ = try bw.flush();
 
     try csv.printTable(file);
