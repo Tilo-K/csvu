@@ -100,13 +100,13 @@ pub fn printTable(file: CsvFile) !void {
     defer alloc.free(col_sizes);
 
     for (0..col_nums) |i| {
-        col_sizes[i] = file.header.items[i].len;
+        col_sizes[i] = file.header.items[i].len + 1;
     }
     for (file.entries.items) |entry| {
         for (0..col_nums) |i| {
             const curr = col_sizes[i];
-            if (entry.items[i].len > curr) {
-                col_sizes[i] = entry.items[i].len;
+            if (entry.items[i].len + 1 > curr) {
+                col_sizes[i] = entry.items[i].len + 1;
             }
         }
     }
