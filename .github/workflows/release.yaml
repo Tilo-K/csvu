@@ -49,9 +49,9 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install Zig
-        uses: mlugg/setup-zig@v2
+        uses: korandoru/setup-zig@v1
         with:
-          version: zig-0.15.0-dev.734+adc4418ba
+          zig-version: zig-0.15.0-dev.734+adc4418ba
 
       - name: Build for ${{ matrix.triple }}
         run: |
