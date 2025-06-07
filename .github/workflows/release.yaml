@@ -51,7 +51,7 @@ jobs:
       - name: Install Zig
         uses: korandoru/setup-zig@v1
         with:
-          zig-version: zig-0.15.0-dev.734+adc4418ba
+          zig-version: master
 
       - name: Build for ${{ matrix.triple }}
         run: |
