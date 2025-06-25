@@ -9,15 +9,18 @@ pub fn getTerminalDimensions() !Dimensions {
     const os_tag = builtin.os.tag;
 
     switch (os_tag) {
-        .linux, .macos, .freebsd, .openbsd, .netbsd => {
+        .linux, .freebsd, .openbsd, .netbsd => {
             return try getUnixTerminalDimensions();
         },
         .windows => {
             return try getWindowsTerminalDimensions();
         },
+        .macos => {
+            return try getMacOsTerminalDimensions();
+        },
         else => {
             return Error.UnsupportedOs;
-        }
+        },
     }
 }
 
@@ -30,6 +33,18 @@ fn getUnixTerminalDimensions() !Dimensions {
     _ = os.linux.ioctl(fd, os.linux.T.IOCSWINSZ, @intFromPtr(&size));
 
     return Dimensions{ .width = size.ws_col, .height = size.ws_row };
+}
+
+pub fn getMacOsTerminalDimensions() !Dimensions {
+    var ws: std.posix.winsize = undefined;
+    const fd = std.io.getStdOut().handle;
+
+    _ = std.c.ioctl(fd, std.posix.T.IOCGWINSZ, @intFromPtr(&ws));
+
+    return Dimensions{
+        .width = ws.col,
+        .height = ws.row,
+    };
 }
 
 fn getWindowsTerminalDimensions() !Dimensions {
