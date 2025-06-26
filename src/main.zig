@@ -5,9 +5,14 @@ pub fn main() !void {
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
-    const alloc = std.heap.page_allocator;
+
+    var allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = allocator.deinit();
+    const alloc = allocator.allocator();
 
     var args = try std.process.ArgIterator.initWithAllocator(alloc);
+    defer args.deinit();
+
     _ = args.next();
 
     var filepath: [:0]const u8 = "";
@@ -22,7 +27,9 @@ pub fn main() !void {
         return;
     }
 
-    var file = try csv.loadFile(filepath);
+    var file = try csv.loadFile(filepath, alloc);
+    defer file.deinit();
+
     const valid = file.isValid();
     if (!valid) return;
 

@@ -5,16 +5,6 @@ const CsvError = error{
     NoDelimiterFound,
 };
 
-fn concat(one: []const u8, two: []const u8) ![]const u8 {
-    const allocator = std.heap.page_allocator;
-    var result = try allocator.alloc(u8, one.len + two.len);
-
-    std.mem.copyForwards(u8, result[0..], one);
-    std.mem.copyForwards(u8, result[one.len..], two);
-
-    return result;
-}
-
 fn contains(arr: []const u8, target: u8) bool {
     for (arr) |element| {
         if (element == target) {
@@ -26,10 +16,13 @@ fn contains(arr: []const u8, target: u8) bool {
 }
 
 pub fn determineDelimiter(str: []const u8) !u8 {
-    const alloc = std.heap.page_allocator;
+    var allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = allocator.deinit();
+    const alloc = allocator.allocator();
 
     const possibleDelimiter = [_]u8{ ',', ';', '\t', '|' };
     var countMap = std.AutoHashMap(u8, u32).init(alloc);
+    defer countMap.deinit();
 
     for (possibleDelimiter) |del| {
         try countMap.put(del, 0);
@@ -66,6 +59,7 @@ pub fn determineDelimiter(str: []const u8) !u8 {
 const CsvFile = struct {
     header: std.ArrayList([]const u8),
     entries: std.ArrayList(std.ArrayList([]const u8)),
+    alloc: std.mem.Allocator,
 
     pub fn isValid(self: CsvFile) bool {
         const colNum = self.header.items.len;
@@ -76,6 +70,17 @@ const CsvFile = struct {
         }
 
         return true;
+    }
+
+    pub fn deinit(self: *CsvFile) void {
+        for (self.header.items) |col| self.alloc.free(col);
+        self.header.deinit();
+
+        for (self.entries.items) |entry| {
+            for (entry.items) |col| self.alloc.free(col);
+            entry.deinit();
+        }
+        self.entries.deinit();
     }
 };
 
@@ -144,21 +149,25 @@ pub fn printTable(file: CsvFile) !void {
     try stdout.print("\n", .{});
 
     for (file.entries.items) |entry| {
-        var out_line: []const u8 = "|";
+        var out_line = std.ArrayList(u8).init(alloc);
+        defer out_line.deinit();
+
+        try out_line.appendSlice("|");
 
         for (0..col_nums) |i| {
             const out = entry.items[i];
             const missing = col_sizes[i] - out.len;
 
-            out_line = try concat(out_line, out);
+            try out_line.appendSlice(out);
 
             for (0..missing) |_| {
-                out_line = try concat(out_line, " ");
+                try out_line.appendSlice(" ");
             }
-            out_line = try concat(out_line, "|");
+            try out_line.appendSlice("|");
         }
-        out_line = try concat(out_line, "\n");
-        _ = try stdout.writeAll(out_line);
+        try out_line.appendSlice("\n");
+
+        _ = try stdout.writeAll(out_line.items);
         _ = try bw.flush();
     }
     for (0..complete_length) |_| {
@@ -167,8 +176,7 @@ pub fn printTable(file: CsvFile) !void {
     try stdout.print("\n", .{});
 }
 
-pub fn loadFile(filepath: []const u8) !CsvFile {
-    const alloc = std.heap.page_allocator;
+pub fn loadFile(filepath: []const u8, alloc: std.mem.Allocator) !CsvFile {
     var file = try std.fs.cwd().openFile(filepath, .{});
     defer file.close();
 
@@ -195,7 +203,12 @@ pub fn loadFile(filepath: []const u8) !CsvFile {
 
             std.mem.copyForwards(u8, dest, part);
             const res = std.mem.trim(u8, dest, &[_]u8{ '\n', '\t', '\r', ' ' });
-            _ = try entr.append(res);
+
+            const res2 = try alloc.alloc(u8, res.len);
+            std.mem.copyForwards(u8, res2, res);
+            alloc.free(dest);
+
+            _ = try entr.append(res2);
         }
 
         if (!readHeader) {
@@ -206,7 +219,7 @@ pub fn loadFile(filepath: []const u8) !CsvFile {
         _ = try entries.append(entr);
     }
 
-    return CsvFile{ .entries = entries, .header = headerList };
+    return CsvFile{ .entries = entries, .header = headerList, .alloc = alloc };
 }
 
 test "Determine delimiter" {
