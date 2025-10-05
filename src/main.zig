@@ -2,9 +2,9 @@ const std = @import("std");
 const csv = @import("csv.zig");
 
 pub fn main() !void {
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    var stdout_buf: [1024]u8 = undefined;
+    const stdout_writer = std.fs.File.stdout().writer(&stdout_buf);
+    var stdout = stdout_writer.interface;
 
     var allocator = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = allocator.deinit();
@@ -23,7 +23,7 @@ pub fn main() !void {
 
     if (std.mem.eql(u8, filepath, "")) {
         _ = try stdout.write("No file specified");
-        _ = try bw.flush();
+        _ = try stdout.flush();
         return;
     }
 
@@ -33,8 +33,8 @@ pub fn main() !void {
     const valid = file.isValid();
     if (!valid) return;
 
-    _ = try bw.flush();
+    _ = try stdout.flush();
 
     try csv.printTable(file);
-    _ = try bw.flush();
+    _ = try stdout.flush();
 }
