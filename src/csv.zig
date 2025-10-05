@@ -87,8 +87,8 @@ const CsvFile = struct {
 
 pub fn printTable(file: CsvFile) !void {
     var stdout_buf: [1024]u8 = undefined;
-    const stdout_writer = std.fs.File.stdout().writer(&stdout_buf);
-    var stdout = stdout_writer.interface;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buf);
+    var stdout = &stdout_writer.interface;
 
     defer {
         _ = stdout.flush() catch null;
@@ -180,9 +180,10 @@ pub fn printTable(file: CsvFile) !void {
 pub fn loadFile(filepath: []const u8, alloc: std.mem.Allocator) !CsvFile {
     var file_buf: [4096]u8 = undefined;
 
-    var file = try std.fs.cwd().openFile(filepath, .{});
+    var file = try std.fs.cwd().openFile(filepath, .{ .mode = .read_write });
     defer file.close();
-    var in_stream = file.reader(&file_buf).interface;
+    var file_reader = file.reader(&file_buf);
+    const in_stream = &file_reader.interface;
 
     var readHeader = false;
     var headerList: std.ArrayList([]const u8) = undefined;

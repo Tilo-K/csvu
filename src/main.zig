@@ -3,8 +3,8 @@ const csv = @import("csv.zig");
 
 pub fn main() !void {
     var stdout_buf: [1024]u8 = undefined;
-    const stdout_writer = std.fs.File.stdout().writer(&stdout_buf);
-    var stdout = stdout_writer.interface;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buf);
+    var stdout = &stdout_writer.interface;
 
     var allocator = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = allocator.deinit();
