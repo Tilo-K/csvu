@@ -74,23 +74,24 @@ const CsvFile = struct {
 
     pub fn deinit(self: *CsvFile) void {
         for (self.header.items) |col| self.alloc.free(col);
-        self.header.deinit();
+        self.header.deinit(self.alloc);
 
-        for (self.entries.items) |entry| {
+        for (self.entries.items) |entry_c| {
+            var entry = entry_c;
             for (entry.items) |col| self.alloc.free(col);
-            entry.deinit();
+            entry.deinit(self.alloc);
         }
-        self.entries.deinit();
+        self.entries.deinit(self.alloc);
     }
 };
 
 pub fn printTable(file: CsvFile) !void {
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    var stdout_buf: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buf);
+    var stdout = &stdout_writer.interface;
 
     defer {
-        _ = bw.flush() catch null;
+        _ = stdout.flush() catch null;
     }
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -141,7 +142,7 @@ pub fn printTable(file: CsvFile) !void {
     }
 
     _ = try stdout.writeAll("\n");
-    _ = try bw.flush();
+    _ = try stdout.flush();
 
     for (0..complete_length) |_| {
         try stdout.print("-", .{});
@@ -149,26 +150,26 @@ pub fn printTable(file: CsvFile) !void {
     try stdout.print("\n", .{});
 
     for (file.entries.items) |entry| {
-        var out_line = std.ArrayList(u8).init(alloc);
-        defer out_line.deinit();
+        var out_line = std.ArrayList(u8){};
+        defer out_line.deinit(alloc);
 
-        try out_line.appendSlice("|");
+        try out_line.appendSlice(alloc, "|");
 
         for (0..col_nums) |i| {
             const out = entry.items[i];
             const missing = col_sizes[i] - out.len;
 
-            try out_line.appendSlice(out);
+            try out_line.appendSlice(alloc, out);
 
             for (0..missing) |_| {
-                try out_line.appendSlice(" ");
+                try out_line.appendSlice(alloc, " ");
             }
-            try out_line.appendSlice("|");
+            try out_line.appendSlice(alloc, "|");
         }
-        try out_line.appendSlice("\n");
+        try out_line.appendSlice(alloc, "\n");
 
         _ = try stdout.writeAll(out_line.items);
-        _ = try bw.flush();
+        _ = try stdout.flush();
     }
     for (0..complete_length) |_| {
         try stdout.print("-", .{});
@@ -177,25 +178,32 @@ pub fn printTable(file: CsvFile) !void {
 }
 
 pub fn loadFile(filepath: []const u8, alloc: std.mem.Allocator) !CsvFile {
-    var file = try std.fs.cwd().openFile(filepath, .{});
-    defer file.close();
+    var file_buf: [4096]u8 = undefined;
 
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
-    var buffer: [4096]u8 = undefined;
+    var file = try std.fs.cwd().openFile(filepath, .{ .mode = .read_write });
+    defer file.close();
+    var file_reader = file.reader(&file_buf);
+    const in_stream = &file_reader.interface;
 
     var readHeader = false;
     var headerList: std.ArrayList([]const u8) = undefined;
-    var entries = std.ArrayList(std.ArrayList([]const u8)).init(alloc);
+    var entries = std.ArrayList(std.ArrayList([]const u8)){};
     var delimiter: u8 = ' ';
 
-    while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+    while (true) {
+        const line = in_stream.takeDelimiterExclusive('\n') catch |err| {
+            if (err == error.EndOfStream) {
+                break;
+            }
+            return err;
+        };
+
         if (delimiter == ' ') {
             delimiter = try determineDelimiter(line);
         }
 
         const del = delimiter;
-        var entr = std.ArrayList([]const u8).init(alloc);
+        var entr = std.ArrayList([]const u8){};
         var splitIt = std.mem.splitSequence(u8, line, &[_]u8{del});
 
         while (splitIt.next()) |part| {
@@ -208,7 +216,7 @@ pub fn loadFile(filepath: []const u8, alloc: std.mem.Allocator) !CsvFile {
             std.mem.copyForwards(u8, res2, res);
             alloc.free(dest);
 
-            _ = try entr.append(res2);
+            _ = try entr.append(alloc, res2);
         }
 
         if (!readHeader) {
@@ -216,7 +224,7 @@ pub fn loadFile(filepath: []const u8, alloc: std.mem.Allocator) !CsvFile {
             readHeader = true;
             continue;
         }
-        _ = try entries.append(entr);
+        _ = try entries.append(alloc, entr);
     }
 
     return CsvFile{ .entries = entries, .header = headerList, .alloc = alloc };
