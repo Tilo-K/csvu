@@ -86,7 +86,7 @@ The csvu is a dynamic CSV utility designed to streamline data handling. It effec
 Before getting started with csvu, ensure your runtime environment meets the following requirements:
 
 - **Programming Language:** Zig
-- **Zig Version:** 0.14.0 or later
+- **Zig Version:** 0.16.0 or later
 
 ### Installation
 
