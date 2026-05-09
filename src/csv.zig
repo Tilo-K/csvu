@@ -1,5 +1,4 @@
 const std = @import("std");
-const term = @import("term.zig");
 
 const CsvError = error{
     NoDelimiterFound,
@@ -16,7 +15,7 @@ fn contains(arr: []const u8, target: u8) bool {
 }
 
 pub fn determineDelimiter(str: []const u8) !u8 {
-    var allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    var allocator = std.heap.DebugAllocator(.{}){};
     defer _ = allocator.deinit();
     const alloc = allocator.allocator();
 
@@ -88,22 +87,21 @@ const CsvFile = struct {
     }
 };
 
-pub fn printTable(file: CsvFile) !void {
+pub fn printTable(io: std.Io, file: CsvFile) !void {
     var stdout_buf: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buf);
+    var stdout_writer = std.Io.File.stdout().writerStreaming(io, &stdout_buf);
     var stdout = &stdout_writer.interface;
 
     defer {
         _ = stdout.flush() catch null;
     }
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer {
         _ = gpa.deinit();
     }
 
     const alloc = gpa.allocator();
-    const dimensions = try term.getTerminalDimensions();
     const col_nums = file.header.items.len;
     const col_sizes = try alloc.alloc(usize, col_nums);
     defer alloc.free(col_sizes);
@@ -119,8 +117,6 @@ pub fn printTable(file: CsvFile) !void {
             }
         }
     }
-
-    _ = dimensions;
 
     var complete_length = col_nums + 1;
     for (col_sizes) |col_size| {
@@ -152,7 +148,7 @@ pub fn printTable(file: CsvFile) !void {
     try stdout.print("\n", .{});
 
     for (file.entries.items) |entry| {
-        var out_line = std.ArrayList(u8){};
+        var out_line: std.ArrayList(u8) = .empty;
         defer out_line.deinit(alloc);
 
         try out_line.appendSlice(alloc, "|");
@@ -178,36 +174,35 @@ pub fn printTable(file: CsvFile) !void {
     try stdout.print("\n", .{});
 }
 
-pub fn loadFile(filepath: []const u8, alloc: std.mem.Allocator) !CsvFile {
+pub fn loadFile(io: std.Io, filepath: []const u8, alloc: std.mem.Allocator) !CsvFile {
     var file_buf: [4096]u8 = undefined;
 
-    var file = try std.fs.cwd().openFile(filepath, .{ .mode = .read_write });
-    defer file.close();
-    var file_reader = file.reader(&file_buf);
+    var file = try std.Io.Dir.cwd().openFile(io, filepath, .{ .mode = .read_write });
+    defer file.close(io);
+    var file_reader = file.readerStreaming(io, &file_buf);
     const in_stream = &file_reader.interface;
 
     var readHeader = false;
     var headerList: std.ArrayList([]const u8) = undefined;
-    var entries = std.ArrayList(std.ArrayList([]const u8)){};
-    var lines = std.ArrayList([]const u8){};
+    var entries: std.ArrayList(std.ArrayList([]const u8)) = .empty;
+    var lines: std.ArrayList([]const u8) = .empty;
 
     var delimiter: u8 = ' ';
 
     while (true) {
-        const line = in_stream.takeDelimiterExclusive('\n') catch |err| {
-            if (err == error.EndOfStream) {
-                break;
-            }
-            return err;
+        const line = in_stream.takeDelimiter('\n') catch |err| switch (err) {
+            error.ReadFailed => return file_reader.err.?,
+            else => return err,
         };
+        if (line == null) break;
 
         if (delimiter == ' ') {
-            delimiter = try determineDelimiter(line);
+            delimiter = try determineDelimiter(line.?);
         }
 
         const del = delimiter;
-        var entr = std.ArrayList([]const u8){};
-        var splitIt = std.mem.splitSequence(u8, line, &[_]u8{del});
+        var entr: std.ArrayList([]const u8) = .empty;
+        var splitIt = std.mem.splitSequence(u8, line.?, &[_]u8{del});
 
         while (splitIt.next()) |part| {
             const dest = try alloc.alloc(u8, part.len);
