@@ -227,12 +227,13 @@ pub fn loadFile(io: std.Io, filepath: []const u8, alloc: std.mem.Allocator) !Csv
 
 test "Determine delimiter" {
     const del = try determineDelimiter("this,is,a,test");
-    std.testing.expect(del == ',');
+    try std.testing.expect(del == ',');
 
     const del2 = try determineDelimiter("th#is; is,a; test;     with,many;symbols");
-    std.testing.expect(del2 == ';');
+    try std.testing.expect(del2 == ';');
 
-    determineDelimiter("This does not have an delimiter") catch |err| {
-        try std.testing.expect(err == CsvError.NoDelimiterFound);
-    };
+    try std.testing.expectError(
+        CsvError.NoDelimiterFound,
+        determineDelimiter("This does not have an delimiter"),
+    );
 }
