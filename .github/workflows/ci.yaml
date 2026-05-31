@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Format, Test, Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Check formatting
+        run: zig fmt --check .
+
+      - name: Run tests
+        run: zig build test
+
+      - name: Build
+        run: zig build
+
+      - name: Build release mode
+        run: zig build -Doptimize=ReleaseSafe

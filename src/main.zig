@@ -1,16 +1,16 @@
 const std = @import("std");
 const csv = @import("csv.zig");
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     var stdout_buf: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buf);
+    var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buf);
     var stdout = &stdout_writer.interface;
 
-    var allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    var allocator = std.heap.DebugAllocator(.{}){};
     defer _ = allocator.deinit();
     const alloc = allocator.allocator();
 
-    var args = try std.process.ArgIterator.initWithAllocator(alloc);
+    var args = try init.minimal.args.iterateAllocator(alloc);
     defer args.deinit();
 
     _ = args.next();
@@ -27,7 +27,7 @@ pub fn main() !void {
         return;
     }
 
-    var file = try csv.loadFile(filepath, alloc);
+    var file = try csv.loadFile(init.io, filepath, alloc);
     defer file.deinit();
 
     const valid = file.isValid();
@@ -35,6 +35,6 @@ pub fn main() !void {
 
     _ = try stdout.flush();
 
-    try csv.printTable(file);
+    try csv.printTable(init.io, file);
     _ = try stdout.flush();
 }
